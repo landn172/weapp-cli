@@ -1,5 +1,7 @@
 import * as regedit from 'regedit'
 import * as path from 'path'
+import { exec } from 'child_process'
+import { readCacheFile, writeCacheFile } from './cache'
 
 const userDirName = `微信web开发者工具`
 const userDirPath = path.join(
@@ -19,19 +21,69 @@ const guidReg = /^\{.*\}$/
 
 export const isMac = process.platform === 'darwin'
 
-export function findWeappDir() {
-  if (isMac) return Promise.resolve('')
-  return findWeappDirInMuiCache()
-    .then(ret => ret, () => findWeappInUninstallReg())
-    .then(ret => {
-      return ret
-    })
+/**
+ *
+ * @param cmd
+ * @example
+ *  invoke('-o') 打开
+ *  invoke('cli -l)  登录，在终端中打印登录二维码
+ */
+export async function invoke(cmd: string) {
+  const cliDir = await findWeappDir()
+  const cli = findCli(cliDir)
+  if (cmd.indexOf('cli') !== 0) {
+    cmd = `cli ${cmd}`
+  }
+  const child = exec(`cd ${cliDir} && ${cmd}`)
+
+  child.stdout.on('data', data => {
+    console.log(data)
+  })
+
+  child.stderr.on('data', data => {
+    console.log(data)
+  })
+
+  child.on('close', function(code) {
+    console.log('closing code: ' + code)
+  })
+}
+
+function findCli(cliDir: string) {
+  if (isMac) return path.join(cliDir, '/Contents/Resources/app.nw/bin/')
+  return path.join(cliDir)
+}
+
+/**
+ * 查找微信开发工具目录
+ */
+export function findWeappDir(): Promise<string> {
+  return readCacheFile().then(
+    dir => {
+      return JSON.parse(dir).dir
+    },
+    () => {
+      if (isMac) return Promise.resolve('')
+      return findWeappDirInMuiCache()
+        .then(ret => ret, () => findWeappInUninstallReg())
+        .then(ret => {
+          if (ret) {
+            writeCacheFile(
+              JSON.stringify({
+                dir: ret
+              })
+            )
+          }
+          return ret
+        })
+    }
+  )
 }
 
 /**
  * 从缓存中那路径
  */
-export function findWeappDirInMuiCache(): Promise<string> {
+function findWeappDirInMuiCache(): Promise<string> {
   return new Promise((resolve, reject) => {
     regedit.list(muiCahceRegUrl, (err: any, result: any) => {
       if (err) return console.error(err)
@@ -53,7 +105,7 @@ export function findWeappDirInMuiCache(): Promise<string> {
 /**
  * 从删除注册表中找工具安装目录
  */
-export function findWeappInUninstallReg(): Promise<string> {
+function findWeappInUninstallReg(): Promise<string> {
   return new Promise((resolve, reject) => {
     regedit.list(uninstallRegUrl, (err: any, result: any) => {
       if (err) return console.error(err)
@@ -84,7 +136,7 @@ export function findWeappInUninstallReg(): Promise<string> {
   })
 }
 
-export function findWeappSoftInRegUrl(regUrl: string): Promise<string> {
+function findWeappSoftInRegUrl(regUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
     regedit.list(regUrl, (err: any, result: any) => {
       if (err) return console.error(err)

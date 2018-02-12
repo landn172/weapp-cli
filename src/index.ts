@@ -1,5 +1,7 @@
-import { findWeappDir } from './util'
+import { invoke } from './util'
 
-findWeappDir().then(dir => {
-  console.log(dir)
-})
+const args = process.argv
+
+const commands = args.slice(2).join(' ')
+console.log(commands)
+invoke(commands)
